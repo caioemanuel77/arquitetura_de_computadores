@@ -1,6 +1,21 @@
 import memory
 from array import array
 
+def bitwise_divmod(n, d, bit=31, q=0, r=0):
+    if bit >> 64: return q, r
+    r = (r << 1) | ((n >> bit) & 1)
+    diff = r - d
+    if not (diff >> 64):
+        r = diff
+        q = q | (1 << bit)
+    return bitwise_divmod(n, d, bit - 1, q, r)
+
+def bitwise_mul(a, b, bit=0, res=0):
+    if not ((bit - 32) >> 64): return res
+    if (b >> bit) & 1:
+        res = res + (a << bit)
+    return bitwise_mul(a, b, bit + 1, res)
+
 MPC = 0
 MIR = 0
 
@@ -83,58 +98,31 @@ firmware[31] = 0b000000000_000_00010100_000010_000_011
 firmware[32] = 0b000000000_000_00010100_000100_000_100
 
 #==============================================================================
-# MUL (Opcode 33) -> Multiplica X por Y através de somas sucessivas
+# MUL (Opcode 33) -> Calcula X * Y em apenas 2 ciclos
 #==============================================================================
-# 33: Inicializa o acumulador H com 0 -> NEXT: 34
-firmware[33] = int("00010001000000010000000001000000", 2)
+# 33: H = Y -> NEXT: 34
+firmware[33] = int("00010001000000010100000001000100", 2)
 
-# 34: Testar se Y já é zero antes de somar -> NEXT: 35, JAM: 001 (Z)
-firmware[34] = int("00010001100100010100000000000100", 2)
-
-# 35: Decrementa Y (Y = Y - 1) -> NEXT: 19
-firmware[35] = int("00001001100000110110000010000100", 2)
-
-# 19: Acumula X em H (H = H + X) -> NEXT: 34
-firmware[19] = int("00010001000000111100000001000011", 2)
-
-# 291 (35 + 256): Fim do loop de multiplicação. X = H -> NEXT: 0
-firmware[291] = int("00000000000000011000000100000000", 2)
+# 34: X = H * X -> NEXT: 0, ALU: MUL (100000)
+firmware[34] = int("00000000000000100000000100000011", 2)
 
 #==============================================================================
-# MOD (Opcode 36) -> Calcula X % Y através de subtrações sucessivas
+# MOD (Opcode 36) -> Calcula X % Y em apenas 2 ciclos
 #==============================================================================
-# 36: H = Y -> NEXT: 44, JAM: 000
+# 36: H = Y -> NEXT: 44
 firmware[36] = int("00010110000000010100000001000100", 2)
 
-# 44: Loop de subtração: Testa (X - H) -> NEXT: 45, JAM: 010 (N)
-firmware[44] = int("00010110101000111111000000000011", 2)
-
-# 45: Efetiva a subtração (X = X - H) -> NEXT: 44, JAM: 000
-firmware[45] = int("00010110000000111111000100000011", 2)
-
-# 301 (45 + 256): Fim do loop. Restaura Z flag (X = X) -> NEXT: 0
-firmware[301] = int("00000000000000010100000100000011", 2)
+# 44: X = X % H -> NEXT: 0, ALU: MOD (100001)
+firmware[44] = int("00000000000000100001000100000011", 2)
 
 #==============================================================================
-# DIV (Opcode 39) -> Calcula X / Y através de subtrações sucessivas
+# DIV (Opcode 39) -> Calcula X / Y em apenas 2 ciclos
 #==============================================================================
-# 39: Salva o divisor (Y) no acumulador H -> NEXT: 40
+# 39: H = Y -> NEXT: 40
 firmware[39] = int("00010100000000010100000001000100", 2)
 
-# 40: Zera o registrador Y (usado agora como contador do quociente) -> NEXT: 41
-firmware[40] = int("00010100100000010000000010000000", 2)
-
-# 41: Loop: Testa (X - H) -> NEXT: 42, JAM: 010 (N)
-firmware[41] = int("00010101001000111111000000000011", 2)
-
-# 42: Efetiva a subtração (X = X - H) -> NEXT: 43
-firmware[42] = int("00010101100000111111000100000011", 2)
-
-# 43: Incrementa o quociente (Y = Y + 1) -> NEXT: 41 (Volta pro teste)
-firmware[43] = int("00010100100000110101000010000100", 2)
-
-# 298 (42 + 256): Fim do loop (Ficou negativo). Copia quociente (Y) para X -> NEXT: 0
-firmware[298] = int("00000000000000010100000100000100", 2)
+# 40: X = X / H -> NEXT: 0, ALU: DIV (100010)
+firmware[40] = int("00000000000000100010000100000011", 2)
 
 #==============================================================================
 # AND (Opcode 47) -> Calcula X = X & Y 
@@ -250,7 +238,13 @@ def alu(control_bits):
        o = -1
     elif control_bits == 0b000111: 
        o = b & 0xFF
-   
+    elif control_bits == 0b100000: 
+       o = bitwise_mul(a, b)
+    elif control_bits == 0b100001:
+       o = bitwise_divmod(b, a)[1] if a else 0
+    elif control_bits == 0b100010: 
+       o = bitwise_divmod(b, a)[0] if a else 0
+
     o = o & 0xFFFFFFFF
 
     Z = 0
