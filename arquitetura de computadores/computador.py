@@ -4,7 +4,7 @@ import clock
 import ufc2x as cpu
 import disk
 
-#LÃª binÃ¡rio do programa no disco e coloca na memÃ³ria
+#Lê binário do programa no disco e coloca na memória
 disk.read(str(sys.argv[1]))
 
 #Inicializa valores de teste na memÃ³ria

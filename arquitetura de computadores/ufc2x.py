@@ -85,35 +85,74 @@ firmware[32] = 0b000000000_000_00010100_000100_000_100
 #==============================================================================
 # MUL (Opcode 33) -> Multiplica X por Y através de somas sucessivas
 #==============================================================================
-# 33: Inicializa o acumulador H com 0 -> NEXT: 34, JAM: 000, ALU: 010000, REG_C: 000001 (H)
-firmware[33] = int("00010001000001000000000100000000", 2)
+# 33: Inicializa o acumulador H com 0 -> NEXT: 34
+firmware[33] = int("00010001000000010000000001000000", 2)
 
-# 34: Testar se Y já é zero antes de somar -> NEXT: 35, JAM: 001 (Z), ALU: 010100 (B), REG_B: 100 (Y)
-firmware[34] = int("00010101100101010000000000000100", 2)
+# 34: Testar se Y já é zero antes de somar -> NEXT: 35, JAM: 001 (Z)
+firmware[34] = int("00010001100100010100000000000100", 2)
 
-# 35: Decrementa Y (Y = Y - 1) -> NEXT: 19, JAM: 000, ALU: 110110 (B-1), REG_C: 000010 (Y), REG_B: 100 (Y)
-firmware[35] = int("00001001100011011000001000000100", 2)
+# 35: Decrementa Y (Y = Y - 1) -> NEXT: 19
+firmware[35] = int("00001001100000110110000010000100", 2)
 
-# 19: Acumula X em H (H = H + X) -> NEXT: 34, JAM: 000, ALU: 111100 (A+B), REG_C: 000001 (H), REG_B: 011 (X)
-firmware[19] = int("00010001000011110000000100000011", 2)
+# 19: Acumula X em H (H = H + X) -> NEXT: 34
+firmware[19] = int("00010001000000111100000001000011", 2)
 
-# 291 (35 + 256): Fim do loop de multiplicação -> NEXT: 0, JAM: 000, ALU: 011000 (A), REG_C: 000100 (X)
-firmware[291] = int("00000000000001100000010000000000", 2)
+# 291 (35 + 256): Fim do loop de multiplicação. X = H -> NEXT: 0
+firmware[291] = int("00000000000000011000000100000000", 2)
 
 #==============================================================================
-# MOD (Opcode 36) -> Calcula X % Y através de subtrações sucessivas protegidas
+# MOD (Opcode 36) -> Calcula X % Y através de subtrações sucessivas
 #==============================================================================
-# 36: Carrega Y em H -> NEXT: 21, JAM: 000, ALU: 010100, REG_C: 000001 (H), REG_B: 100 (Y)
-firmware[36] = int("00001010100001010000000100000100", 2)
+# 36: H = Y -> NEXT: 44, JAM: 000
+firmware[36] = int("00010110000000010100000001000100", 2)
 
-# 21: Loop de subtração: Testa (X - H) -> NEXT: 22, JAM: 010 (N), ALU: 111111 (B-A), REG_B: 011 (X)
-firmware[21] = int("00001011001011111100000000000011", 2)
+# 44: Loop de subtração: Testa (X - H) -> NEXT: 45, JAM: 010 (N)
+firmware[44] = int("00010110101000111111000000000011", 2)
 
-# 22: Efetiva a subtração em X -> NEXT: 21, JAM: 000, ALU: 111111 (B-A), REG_C: 000100 (X), REG_B: 011 (X)
-firmware[22] = int("00001010100011111100010000000011", 2)
+# 45: Efetiva a subtração (X = X - H) -> NEXT: 44, JAM: 000
+firmware[45] = int("00010110000000111111000100000011", 2)
 
-# 278 (22 + 256): Restaura o último valor positivo -> NEXT: 0, JAM: 000, ALU: 111100 (A+B), REG_C: 000100 (X)
-firmware[278] = int("00000000000011110000010000000000", 2)
+# 301 (45 + 256): Fim do loop. Restaura Z flag (X = X) -> NEXT: 0
+firmware[301] = int("00000000000000010100000100000011", 2)
+
+#==============================================================================
+# DIV (Opcode 39) -> Calcula X / Y através de subtrações sucessivas
+#==============================================================================
+# 39: Salva o divisor (Y) no acumulador H -> NEXT: 40
+firmware[39] = int("00010100000000010100000001000100", 2)
+
+# 40: Zera o registrador Y (usado agora como contador do quociente) -> NEXT: 41
+firmware[40] = int("00010100100000010000000010000000", 2)
+
+# 41: Loop: Testa (X - H) -> NEXT: 42, JAM: 010 (N)
+firmware[41] = int("00010101001000111111000000000011", 2)
+
+# 42: Efetiva a subtração (X = X - H) -> NEXT: 43
+firmware[42] = int("00010101100000111111000100000011", 2)
+
+# 43: Incrementa o quociente (Y = Y + 1) -> NEXT: 41 (Volta pro teste)
+firmware[43] = int("00010100100000110101000010000100", 2)
+
+# 298 (42 + 256): Fim do loop (Ficou negativo). Copia quociente (Y) para X -> NEXT: 0
+firmware[298] = int("00000000000000010100000100000100", 2)
+
+#==============================================================================
+# AND (Opcode 47) -> Calcula X = X & Y 
+#==============================================================================
+# 47: Salva Y no acumulador H -> NEXT: 48
+firmware[47] = int("00011000000000010100000001000100", 2)
+
+# 48: Executa X = H & X na ULA -> NEXT: 0
+firmware[48] = int("00000000000000001100000100000011", 2)
+
+#==============================================================================
+# JN (Opcode 49) -> IF X < 0 GOTO address
+#==============================================================================
+# 49: Testa a flag N (Negativo) -> NEXT: 12, JAM: 010 (N), ALU: B, REG_B: X
+firmware[49] = int("00000110001000010100000000000011", 2)
+
+# 305 (49 + 256): Executa o salto -> NEXT: 9
+firmware[305] = int("00000100100000000000000000000000", 2)
 
 # GET_BYTE (Opcode 37) e SHR_BYTE (Opcode 38)
 
@@ -209,10 +248,9 @@ def alu(control_bits):
        o = 1
     elif control_bits == 0b110010:
        o = -1
-    elif control_bits == 0b000111:  # Isolador do Byte 0 de BUS_B para GET_BYTE
+    elif control_bits == 0b000111: 
        o = b & 0xFF
    
-    # Mascara o resultado para simular barramento de 32 bits real
     o = o & 0xFFFFFFFF
 
     Z = 0
@@ -221,7 +259,6 @@ def alu(control_bits):
     if o == 0:
        Z = 1
 
-    # Checa o bit mais significativo (Bit 31) para determinar sinal negativo em 32 bits
     if o & 0x80000000:
        N = 1    
     
@@ -230,7 +267,7 @@ def alu(control_bits):
     elif shift_bits == 0b10:
        o = o >> 1
     elif shift_bits == 0b11:
-       o = o >> 8  # Deslocamento modificado para a direita para suportar vetores
+       o = o >> 8 
 
     BUS_C = o
     
