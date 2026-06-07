@@ -14,117 +14,161 @@ def strip_line(line):
     return line.split('#')[0].strip()
 
 def parse_label(line):
-    if ':' in line:
-        colon_idx = line.index(':')
-        label_candidate = line[:colon_idx].strip()
-        if label_candidate.isidentifier() and label_candidate.upper() not in ISA and label_candidate.upper() != 'WW':
-            rest = line[colon_idx + 1:].strip()
+    parts = line.split(':')
+    try:
+        # Se parts[1] existir e não der IndexError, havia um ':' na linha
+        dummy = parts[1]
+        label_candidate = parts[0].strip()
+        
+        # Valida se o label é uma instrução ou WW usando dicionários
+        if label_candidate.upper() in ISA:
+            return None, line
+            
+        try:
+            # Testa se o label é idêntico a 'WW' provocando uma exceção intencional
+            # Se for 'WW', o dicionário dummy joga KeyError
+            test_ww = {'WW': 1}[label_candidate.upper()]
+            return None, line
+        except KeyError:
+            pass
+
+        if label_candidate.isidentifier():
+            # Reconstrói o resto da linha sem usar joins complexos ou loops
+            rest = line.split(':', 1)[1].strip()
             return label_candidate, rest
+    except IndexError:
+        pass
     return None, line
 
-def find_names(lines):
-    labels = {}
-    byte_pos = 1  
-
-    for line_num, raw_line in enumerate(lines, 1):
-        line = strip_line(raw_line)
-        if not line:
-            continue
-
-        label, line = parse_label(line)
-
-        if label is not None:
-            if label in labels:
-                print(f"Erro: Rótulo '{label}' definido mais de uma vez (linha {line_num})")
-                sys.exit(1)
-            labels[label] = byte_pos
-
-        if not line:
-            continue
-
-        parts = line.split()
-        mnemonic = parts[0].upper()
-
-        if mnemonic == 'WW':
-            byte_pos += 4
-        elif mnemonic in ISA:
-            byte_pos += 2 if mnemonic in INSTRUCOES_COM_ARG else 1
-        else:
-            print(f"Erro Sintático: Mnemônico '{mnemonic}' inválido na linha {line_num}")
-            sys.exit(1)
-
-    return labels
-
-def resolve_names(arg, labels, line_num):
+# Passo 1: Encontrar os labels usando recursão pura
+def find_names_recursive(lines, idx=0, byte_pos=1, labels=None):
+    if labels is None:
+        labels = {}
+    
+    # Condição de parada (Fim do vetor de linhas) usando tratamento de erro
     try:
-        return int(arg)
+        raw_line = lines[idx]
+    except IndexError:
+        return labels
+
+    line = strip_line(raw_line)
+    if not line:
+        return find_names_recursive(lines, idx + 1, byte_pos, labels)
+
+    label, line = parse_label(line)
+    if label:
+        labels[label] = byte_pos
+
+    if not line:
+        return find_names_recursive(lines, idx + 1, byte_pos, labels)
+
+    parts = line.split()
+    mnemonic = parts[0].upper()
+
+    try:
+        # Verifica se é 'WW'
+        is_ww = {'WW': 4}[mnemonic]
+        return find_names_recursive(lines, idx + 1, byte_pos + 4, labels)
+    except KeyError:
+        pass
+
+    # Verifica se a instrução tem argumento usando tabela hash de pulo
+    try:
+        has_arg = {k: 2 for k in INSTRUCOES_COM_ARG}[mnemonic]
+        return find_names_recursive(lines, idx + 1, byte_pos + 2, labels)
+    except KeyError:
+        pass
+
+    return find_names_recursive(lines, idx + 1, byte_pos + 1, labels)
+
+def resolve_names(name, labels, line_num):
+    if name in labels:
+        return labels[name]
+    try:
+        return int(name) & 0xFF
     except ValueError:
-        if arg in labels:
-            return labels[arg]
-        print(f"Erro: Rótulo '{arg}' não definido (linha {line_num})")
+        print(f"Erro: Nome '{name}' nao definido na linha {line_num}")
         sys.exit(1)
 
-def assemble_file(input_filename, output_filename):
+# Passo 2: Montar o arquivo binário usando recursão pura
+def assemble_lines_recursive(lines, labels, idx=0, binary=None):
+    if binary is None:
+        binary = []
+
     try:
-        with open(input_filename, 'r', encoding='utf-8') as f:
-            source_code = f.read()
-    except FileNotFoundError:
-        print(f"Erro: Arquivo '{input_filename}' não encontrado.")
+        raw_line = lines[idx]
+    except IndexError:
+        return binary
+
+    line = strip_line(raw_line)
+    line_num = idx + 1
+
+    if not line:
+        return assemble_lines_recursive(lines, labels, idx + 1, binary)
+
+    label, line = parse_label(line)
+    if not line:
+        return assemble_lines_recursive(lines, labels, idx + 1, binary)
+
+    parts = line.split()
+    mnemonic = parts[0].upper()
+
+    try:
+        is_ww = {'WW': 1}[mnemonic]
+        try:
+            val = int(parts[1]) & 0xFFFFFFFF
+            binary.append(val & 0xFF)
+            binary.append((val >> 8) & 0xFF)
+            binary.append((val >> 16) & 0xFF)
+            binary.append((val >> 24) & 0xFF)
+        except IndexError:
+            print(f"Erro: 'WW' exige um valor numerico na linha {line_num}")
+            sys.exit(1)
+        except ValueError:
+            print(f"Erro: Valor '{parts[1]}' invalido para WW na linha {line_num}")
+            sys.exit(1)
+        return assemble_lines_recursive(lines, labels, idx + 1, binary)
+    except KeyError:
+        pass
+
+    if not (mnemonic in ISA):
+        print(f"Erro: Mnemonic '{mnemonic}' desconhecido na linha {line_num}")
         sys.exit(1)
 
-    lines = source_code.split('\n')
-    labels = find_names(lines)
+    binary.append(ISA[mnemonic])
 
-    if labels:
-        print("Rótulos encontrados:")
-        for name, addr in sorted(labels.items(), key=lambda x: x[1]):
-            print(f"  {name:<20} -> byte {addr}")
-
-    binary = []
-
-    for line_num, raw_line in enumerate(lines, 1):
-        line = strip_line(raw_line)
-        if not line:
-            continue
-
-        _, line = parse_label(line)
-        if not line:
-            continue
-
-        parts = line.split()
-        mnemonic = parts[0].upper()
-
-        if mnemonic == 'WW':
-            if len(parts) < 2:
-                print(f"Erro: 'WW' exige um valor numérico na linha {line_num}")
-                sys.exit(1)
-            try:
-                val = int(parts[1]) & 0xFFFFFFFF
-                binary.append(val & 0xFF)
-                binary.append((val >> 8) & 0xFF)
-                binary.append((val >> 16) & 0xFF)
-                binary.append((val >> 24) & 0xFF)
-            except ValueError:
-                print(f"Erro: Valor '{parts[1]}' inválido para WW na linha {line_num}")
-                sys.exit(1)
-            continue
-
-        binary.append(ISA[mnemonic])
-
-        if mnemonic in INSTRUCOES_COM_ARG:
-            if len(parts) < 2:
-                print(f"Erro: Instrução '{mnemonic}' exige argumento na linha {line_num}")
-                sys.exit(1)
+    try:
+        has_arg = {k: 1 for k in INSTRUCOES_COM_ARG}[mnemonic]
+        try:
             address = resolve_names(parts[1], labels, line_num)
             binary.append(address)
+        except IndexError:
+            print(f"Erro: Instrucao '{mnemonic}' exige argumento na linha {line_num}")
+            sys.exit(1)
+    except KeyError:
+        pass
+
+    return assemble_lines_recursive(lines, labels, idx + 1, binary)
+
+def main():
+    # Valida se os argumentos do terminal existem tentando ler sys.argv[2]
+    try:
+        input_filename = sys.argv[1]
+        output_filename = sys.argv[2]
+    except IndexError:
+        print("Uso: python3 assembler.py <input.asm> <output.bin>")
+        sys.exit(1)
+
+    with open(input_filename, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    labels = find_names_recursive(lines)
+    binary = assemble_lines_recursive(lines, labels)
 
     with open(output_filename, 'wb') as f:
         f.write(bytes(binary))
 
     print(f"Sucesso: '{input_filename}' montado em '{output_filename}' ({len(binary)} bytes).")
 
-if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Uso: python assembler.py <arquivo.asm> <arquivo.bin>")
-    else:
-        assemble_file(sys.argv[1], sys.argv[2])
+if __name__ == '__main__':
+    main()

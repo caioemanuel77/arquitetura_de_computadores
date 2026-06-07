@@ -4,9 +4,11 @@ import clock
 import ufc2x as cpu
 import disk
 
-#Lê binário do programa no disco e coloca na memória
+#LÃª binÃ¡rio do programa no disco e coloca na memÃ³ria
 disk.read(str(sys.argv[1]))
-
+print("w1:",memory.read_word(1))
+print("w2:",memory.read_word(2))
+print("w3:",memory.read_word(3))
 #Inicializa valores de teste na memÃ³ria
 if len(sys.argv) > 2: 
     input1 = int(sys.argv[2]) & 0xFFFFFFFF;
@@ -17,7 +19,9 @@ if len(sys.argv) == 4:
 memory.write_word(1, 0);
 
 #Realiza a computaÃ§Ã£o (liga processador)
-ticks = clock.start([cpu], auto=True)
-
+ticks = clock.start([cpu])
+print("w1:",memory.read_word(1))
+print("w2:",memory.read_word(2))
+print("w3:",memory.read_word(3))
 #Exibe resultado
 print(memory.read_word(1),";",ticks)
