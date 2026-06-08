@@ -1,184 +1,144 @@
 # ==============================================================================
-# HEADER - RESERVA OBRIGATÓRIA DAS WORDS 1, 2 E 3
+# PROB1 - SOMA DOS FATORES PRIMOS DISTINTOS (RESILIENTE A ENTRADAS EXTREMAS)
+# SE PAR: APENAS BASES DOS FATORES PRIMOS
+# SE ÍMPAR: BASES DOS FATORES PRIMOS + NÚMERO 1
 # ==============================================================================
 JMP INICIO
 
-WW 0        # WORD 1 -> Resposta Final
-WW 0        # WORD 2 -> Entrada (Valor)
-
+WW 0        # WORD 1 (Bytes 4-7)   -> Resposta enviada ao avaliador
+WW 0        # WORD 2 (Bytes 8-11)  -> Entrada (X) injetada pelo servidor
 
 INICIO:
-# Inicialização ultra-rápida de constantes na memória alta
+# 1. Inicialização de Constantes na Memória
 CLEAR
-STORE 108   # [108] = Constante 0
+STORE 108   # [108] = 0
 INC
-STORE 105   # [105] = Constante 1
+STORE 105   # [105] = 1
 INC
-STORE 106   # [106] = Constante 2
+STORE 106   # [106] = 2
 
+# 2. Inicialização de Variáveis de Trabalho
 CLEAR
-STORE 100   # [100] = SOMA ACUMULADA = 0
+STORE 100   # [100] = SOMA ACUMULADA TOTAL = 0
 
-LOAD 2      
+LOAD 2      # Carrega o valor X da Word 2
 STORE 110   # [110] = DIVIDENDO VIVO (X)
 
-# Validação inicial: X <= 1 -> Encerra imediatamente com 0
+# Caso Fronteira: Se X <= 1, não possui fatores válidos. Fim direto.
 SUB 105     # X - 1
-JN FIM_SUCESSO
-JZ FIM_SUCESSO
+JN FIM_PROGRAMA
+JZ FIM_PROGRAMA
 
 # ==============================================================================
-# TESTE DE PARIDADE RÁPIDO
+# ANÁLISE DE PARIDADE DO NÚMERO ORIGINAL
 # ==============================================================================
 LOAD 106
 MOVXY       # Y = 2
-LOAD 110
+LOAD 110    # X original
 MOD         # X % 2
-JNZ FLUXO_IMPAR  # Se o resto for 1, pula direto para o fluxo ímpar
+JNZ FLUXO_IMPAR # Se resto for 1, pula para a lógica de números ímpares
 
 # ==============================================================================
-# [FLUXO PAR] -> FATORAÇÃO PRIMA (OTIMIZADA)
+# [FLUXO PAR] -> Fatoração Clássica do Número 2
 # ==============================================================================
-LOOP_DOIS:
-# Em vez de fazer MOD e depois DIV, nós dividimos direto! 
-# Se o resto (guardado no registrador pela ULA) for zero, aproveitamos o quociente.
-LOAD 106
-MOVXY       # Y = 2
-LOAD 110
-DIV         # X / 2 -> Quociente vai para o acumulador, Resto fica interno
-# Salvamos o quociente temporariamente
-STORE 111   
-
-LOAD 106
-MOVXY
-LOAD 110
-MOD         # Testa se a divisão foi exata
-JNZ PREPARA_IMPARES_PRIMOS # Se deu resto, o fator 2 acabou!
-
-# Foi exata! Acumula o 2 e atualiza X com o quociente que já calculamos
 LOAD 100
-ADD 106
+ADD 106     # Adiciona o fator primo 2 uma única vez
 STORE 100
 
-LOAD 111
-STORE 110   # X = X / 2 (recuperado sem refazer a divisão)
-JMP LOOP_DOIS
+REDUZ_DOIS:
+LOAD 106
+MOVXY       # Y = 2
+LOAD 110    # X
+DIV         # X / 2
+STORE 110   # X = X / 2
 
-PREPARA_IMPARES_PRIMOS:
+# Verifica se o novo X ainda é divisível por 2
+LOAD 106
+MOVXY
+LOAD 110
+MOD
+JZ REDUZ_DOIS # Enquanto for par, continua dividindo por 2 para reduzir X
+
+JMP PREPARA_DIVISORES_IMPARES
+
+# ==============================================================================
+# [FLUXO ÍMPAR] -> Adiciona o 1 Conforme Especificação
+# ==============================================================================
+FLUXO_IMPAR:
+LOAD 100
+ADD 105     # Soma obrigatoriamente o número 1
+STORE 100
+
+# ==============================================================================
+# FATORAÇÃO SEQUENCIAL DOS CANDIDATOS ÍMPARES (3, 5, 7, 9, 11...)
+# ==============================================================================
+PREPARA_DIVISORES_IMPARES:
 LOAD 105
 ADD 106
-STORE 101   # Y = 3
+STORE 101   # [101] = DIVISOR VIVO (Y = 3)
 
-LOOP_FATORES_PRIMOS:
-# Condição de parada: se Y > X / Y, o X restante é primo
+LOOP_FATORACAO:
+# Condição de Saída Matemática Segura: se (X / Y) < Y, significa que Y * Y > X.
+# Se passamos da raiz quadrada de X e o número não foi dividido, o que restou é primo!
 LOAD 101
-MOVXY
-LOAD 110
-DIV         
+MOVXY       # Y
+LOAD 110    # X
+DIV         # X / Y
 SUB 101     # (X / Y) - Y
-JN ADICIONA_ULTIMO_PRIMO
+JN ANALISA_RESIDUO # Se deu negativo, Y ultrapassou a raiz de X. Loop encerrado!
 
-# Otimização de Divisão Única
+# Teste de divisibilidade: X % Y
 LOAD 101
-MOVXY
-LOAD 110
-DIV
-STORE 111   # Armazena quociente (X / Y)
+MOVXY       # Y
+LOAD 110    # X
+MOD         # X % Y
+JNZ PROXIMO_DIVISOR # Se o resto não for 0, pula para o próximo número da lista
 
-LOAD 101
-MOVXY
-LOAD 110
-MOD         # Testa o resto
-JNZ PROXIMO_PRIMO_Y
-
-# É fator primo! Acumula Y e atualiza X com o quociente pronto
+# Sucesso! Encontramos um fator primo distinto. Acumula ele uma única vez.
 LOAD 100
 ADD 101
 STORE 100
 
-LOAD 111
-STORE 110
-JMP LOOP_FATORES_PRIMOS
-
-PROXIMO_PRIMO_Y:
+REDUZ_X_PELO_FATOR:
 LOAD 101
-ADD 106
-STORE 101   # Y = Y + 2
-JMP LOOP_FATORES_PRIMOS
+MOVXY       # Y
+LOAD 110    # X
+DIV         # X / Y
+STORE 110   # X = X / Y
 
-ADICIONA_ULTIMO_PRIMO:
-# Se o que sobrou em X for > 1, ele é o último primo
-LOAD 110
-SUB 105     # X - 1
-JZ FIM_SUCESSO
-LOAD 100
-ADD 110
-STORE 100
-JMP FIM_SUCESSO
-
-# ==============================================================================
-# [FLUXO ÍMPAR] -> SOMA DOS DIVISORES UPGRADE
-# ==============================================================================
-FLUXO_IMPAR:
-LOAD 105
-STORE 100   # O número 1 sempre é divisor. Começamos a SOMA com 1.
-
-# Otimização matemática crucial: O maior divisor possível de um ímpar é X / 3.
-# Se testarmos um candidato Y e ele for divisor, nós descobrimos DOIS divisores de uma vez:
-# O próprio Y e o seu quociente complementar (X / Y)!
-# Isso nos permite cortar a condição de parada na raiz quadrada (Y * Y >= X).
-LOOP_DIVISORES_IMPAR:
-LOAD 105
-ADD 106
-STORE 101   # Inicializa o divisor vivo Y = 3
-
-LOOP_RAIZ_IMPAR:
-LOAD 101
-MOVXY
-LOAD 110
-DIV         # Calcula (X / Y)
-STORE 111   # [111] = Quociente complementar (Z)
-SUB 101     # (X / Y) - Y
-JN FIM_SUCESSO # Se Y > X / Y, passamos da raiz quadrada. Fim imediato!
-
-# Verifica se Y é um divisor exato
+# Checa se o X que sobrou ainda consegue ser dividido pelo mesmo Y
 LOAD 101
 MOVXY
 LOAD 110
 MOD
-JNZ AVANCA_CANDIDATO
+JZ REDUZ_X_PELO_FATOR # Drena totalmente as repetições desse fator primo
 
-# É DIVISOR EXATO! 
-# Vamos checar se os dois fatores achados (o divisor Y e o quociente Z) são iguais
-LOAD 111     # Carrega o quociente Z
-SUB 101     # Z - Y
-JZ ACUMULA_SINGLE # Se forem iguais (raiz perfeita), soma apenas uma vez
-
-# Se forem diferentes, somamos AMBOS os divisores de uma só vez!
-LOAD 100
-ADD 101     # Adiciona o divisor Y
-ADD 111     # Adiciona o quociente complementar Z (Parceiro de divisão)
-STORE 100
-JMP AVANCA_CANDIDATO
-
-ACUMULA_SINGLE:
-LOAD 100
-ADD 101     # Soma apenas o Y (pois Z == Y)
-STORE 100
-
-AVANCA_CANDIDATO:
+PROXIMO_DIVISOR:
 LOAD 101
 ADD 106
-STORE 101   # Y = Y + 2
-JMP LOOP_RAIZ_IMPAR
+STORE 101   # Y = Y + 2 (Avança para o próximo ímpar: 3 -> 5 -> 7...)
+JMP LOOP_FATORACAO
 
 # ==============================================================================
-# SALVAMENTO DO RESULTADO
+# ANÁLISE DO RESÍDUO FINAL DE X
 # ==============================================================================
-FIM_SUCESSO:
-LOAD 100    
-STORE 1     # Descarrega o resultado direto na WORD 1
+ANALISA_RESIDUO:
+# Se após reduzir o número por todos os divisores o X atual for maior que 1,
+# significa que o valor restante é, por si só, um fator primo (o maior deles).
+LOAD 110
+SUB 105     # X - 1
+JN FIM_PROGRAMA
+JZ FIM_PROGRAMA
 
-FIM:
+# Adiciona esse fator primo restante na soma final
+LOAD 100
+ADD 110
+STORE 100
+
+# ==============================================================================
+# GRAVAÇÃO DO RESULTADO E DESLIGAMENTO
+# ==============================================================================
+FIM_PROGRAMA:
+LOAD 100    # Pega o total acumulado da soma
+STORE 1     # Escreve na Word 1 (Onde o corretor vai ler)
 HALT
-JMP FIM     # Escudo anti-timeout

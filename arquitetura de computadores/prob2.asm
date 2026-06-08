@@ -5,7 +5,6 @@ JMP INICIO
 
 WW 0        # WORD 1 -> Resposta Final (Saída)
 WW 0        # WORD 2 -> Entrada (Valor X)
-WW 0        # WORD 3 -> RESERVADA / INTOCADA
 
 INICIO:
 # Inicialização ultra-rápida de constantes na memória alta
