@@ -1,7 +1,7 @@
 import memory
 import sys
 import clock
-import ufc2x as cpu
+import ufc3x as cpu
 import disk
 
 #LÃª binÃ¡rio do programa no disco e coloca na memÃ³ria

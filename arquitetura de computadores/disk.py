@@ -1,21 +1,11 @@
-import memory
+import memory as mem
 
-def read(filename):
-    """
-    Abre o arquivo binário compilado pelo assembler (.bin)
-    e injeta o seu conteúdo sequencialmente na memória RAM
-    a partir do endereço 1 (conforme o padrão do computador avaliador).
-    """
-    try:
-        with open(filename, 'rb') as f:
-            binary_data = f.read()
-        
-        current_address = 1
-        for byte in binary_data:
-            memory.write_byte(current_address, byte)
-            current_address += 1
-            
-    except FileNotFoundError:
-        print(f"Erro no Disco: O arquivo binário '{filename}' não foi encontrado.")
-        import sys
-        sys.exit(1)
+def read(img):
+    disk = open(img, 'rb')
+    byte = disk.read(1)
+    byte_adress = 0
+    while (byte):
+        mem.write_byte(byte_adress, int.from_bytes(byte, byteorder='little'))
+        byte = disk.read(1)
+        byte_adress += 1
+    disk.close()
